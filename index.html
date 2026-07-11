@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+  <title>Breeze — ADHD Daily Companion</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    *{font-family:'Inter',sans-serif;-webkit-tap-highlight-color:transparent}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+    .pulse{animation:pulse 2s infinite}
+    .slide-up{animation:slideUp .28s ease}
+    ::-webkit-scrollbar{width:0}
+    textarea,input{font-family:'Inter',sans-serif}
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen m-0 p-0">
+<div class="flex justify-center min-h-screen bg-gray-100">
+  <div id="root" class="w-full max-w-sm min-h-screen flex flex-col relative bg-gray-50"></div>
+</div>
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════
+   SUPABASE  — anon key only (safe for frontend)
+   ══════════════════════════════════════════════════════════════*/
+const sb = supabase.createClient(
+  'https://xeeayykpjjkyocykbrwm.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhlZWF5eWtwampreW9jeWticndtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NDA4NDgsImV4cCI6MjA5ODQxNjg0OH0.13YIpWRR7-m1Sq6VD7vHdN8kxsI4xKbyqiUpsfjY7Ss'
+);
+
+/* ═══════════════════════════════════════════════════════════════
+   CLINICAL CONSTANTS
+   ══════════════════════════════════════════════════════════════*/
+const ENERGY_LEVELS=[
+  {id:'crisis',emoji:'🆘',label:'Crisis', desc:"Just exist. That's enough today.",     border:'border-red-300',   bg:'bg-red-50',   text:'text-red-600'  },
+  {id:'low',   emoji:'🪫',label:'Drained',desc:'Basics only. Be gentle with yourself.',border:'border-orange-300',bg:'bg-orange-50',text:'text-orange-600'},
+  {id:'medium',emoji:'⚡',label:'Okay',   desc:'You can manage a few things.',          border:'border-blue-300',  bg:'bg-blue-50',  text:'text-blue-600' },
+  {id:'high',  emoji:'🔋',label:'Charged',desc:"Let's make this count!",                border:'border-green-300', bg:'bg-green-50', text:'text-green-600'},
+];
+const PRAYERS_META=[
+  {en:'Fajr',   ar:'الفجر', emoji:'🌅',time:'Dawn'     },
+  {en:'Dhuhr',  ar:'الظهر', emoji:'☀️',time:'Midday'   },
+  {en:'Asr',    ar:'العصر', emoji:'🌤️',time:'Afternoon'},
+  {en:'Maghrib',ar:'المغرب',emoji:'🌆',time:'Sunset'   },
+  {en:'Isha',   ar:'العشاء',emoji:'🌙',time:'Night'    },
+];
+const HALT=[
+  {id:'hungry', emoji:'🍽️',label:'Hungry?', fix:'Have something to eat first',  task:{emoji:'🍽️',text:'Eat something nourishing',      category:'Self-care',time_min:10,difficulty:'easy',energy_needed:'low',habit_stack:''}},
+  {id:'anxious',emoji:'😰',label:'Anxious?',fix:'3 slow breaths → then start',   task:{emoji:'💨',text:'Take 5 deep breaths',            category:'Calm',     time_min:2, difficulty:'easy',energy_needed:'low',habit_stack:''}},
+  {id:'lonely', emoji:'💙',label:'Lonely?', fix:'Text someone you care about',   task:{emoji:'💙',text:'Text someone you care about',     category:'Self-care',time_min:2, difficulty:'easy',energy_needed:'low',habit_stack:''}},
+  {id:'tired',  emoji:'😴',label:'Tired?',  fix:'Water + 5-min rest first',      task:{emoji:'💧',text:'Drink water & rest for 5 minutes',category:'Self-care',time_min:5, difficulty:'easy',energy_needed:'low',habit_stack:''}},
+];
+const STUCK=[
+  {t:'2-Minute Rule',    b:"Commit to just 2 minutes. Tell yourself you can stop after. Starting is the hardest part — your brain will usually keep going."},
+  {t:'Shrink the Step',  b:"Break it to the smallest first action. Not 'clean room' — just 'pick up ONE item.' Lower the bar until it feels ridiculous."},
+  {t:'Move Your Body',   b:"Stand up, shake your hands, walk 5 steps. Physical movement boosts dopamine and activates the prefrontal cortex within seconds."},
+  {t:'Anchor It',        b:"Pair this task with something you already do. 'After I make coffee, I'll do this.' Habit stacking bypasses initiation difficulty."},
+  {t:'Change Location',  b:"Move somewhere else — even one chair over. New environments reduce the activation energy needed to start a task."},
+  {t:'Name the Block',   b:"Say out loud: 'I notice I'm avoiding this.' Naming avoidance activates your prefrontal cortex and weakens the freeze response."},
+  {t:'Imperfect Action', b:"Give yourself permission to do it badly. A messy attempt is neurologically superior to a perfect plan never started."},
+  {t:'3-2-1 Launch',     b:"Count down from 3 out loud. At 1, your body moves before your brain can object. Used by astronauts to override hesitation."},
+];
+const SCIENCE=[
+  'ADHD brains need 3× more external rewards than neurotypical brains. Celebrating small wins is literally medicine — it triggers real dopamine release.',
+  "Time blindness is neurological, not laziness. ADHD brains have impaired prospective memory. Using timers re-trains your brain's time-keeping circuits.",
+  'Decision fatigue hits ADHD brains twice as fast. Pre-planning choices the night before saves critical executive function for what matters most.',
+  'Body doubling works because social presence activates the prefrontal cortex. Working with someone nearby is a legitimate ADHD accommodation.',
+  "The 'just start' technique works: 85% of people who begin a task continue once started. Your brain only needs to overcome initiation — momentum does the rest.",
+  'ADHD brains run on interest, novelty, challenge, or urgency — not importance. Building these elements into tasks is working with your neurology.',
+  '5 minutes of movement increases dopamine by up to 20%. Move before you need to focus — the most underused ADHD tool.',
+  'Sleep deprivation mimics and amplifies ADHD symptoms. Consistent sleep timing can reduce ADHD severity significantly.',
+];
+const AFFIRM=[
+  "Your brain is wired for creativity and hyperfocus. That's a genuine superpower.",
+  "You don't have a willpower problem. You have a dopamine regulation difference.",
+  "Done imperfectly today is better than perfect in your head forever.",
+  "You are not broken. You are differently wired — and that difference has value.",
+  "Every small win produces real dopamine. Celebrate every single one.",
+  "Rest is not laziness. Rest is neurological maintenance.",
+  "Showing up today, even a little, is a genuine victory for your brain.",
+];
+const ACHIEVEMENTS=[
+  {id:'first',   emoji:'🌱',label:'First Step', check:s=>s.tasks.filter(t=>t.done).length>=1},
+  {id:'quick',   emoji:'⚡',label:'Quick Win',  check:s=>s.tasks.some(t=>t.done&&t.time_min<=3)},
+  {id:'hard',    emoji:'💪',label:'Hard Mode',  check:s=>s.tasks.some(t=>t.done&&t.difficulty==='hard')},
+  {id:'streak',  emoji:'🔥',label:'3-Day',      check:s=>(s.profile.current_streak||0)>=3},
+  {id:'xp100',   emoji:'⭐',label:'100 XP',     check:s=>(s.profile.xp||0)>=100},
+  {id:'allday',  emoji:'🏆',label:'Full Day',   check:s=>s.tasks.length>0&&s.tasks.every(t=>t.done)},
+  {id:'dump',    emoji:'🧠',label:'Mind Clear', check:s=>s.dumps.length>0},
+  {id:'focus',   emoji:'🎯',label:'Deep Focus', check:s=>(s.profile.xp||0)>=45},
+  {id:'prayers5',emoji:'🕌',label:'5 Pillars',  check:s=>s.tasks.filter(t=>t.category==='Prayer'&&t.done).length>=5},
+];
+const SUGG={
+  'Self-care':[
+    {emoji:'💧',text:'Drink a full glass of water', time_min:1, difficulty:'easy',  energy_needed:'low',   category:'Self-care'},
+    {emoji:'🥣',text:'Have breakfast',               time_min:10,difficulty:'medium',energy_needed:'medium',category:'Self-care'},
+    {emoji:'💊',text:'Take your medication',         time_min:1, difficulty:'easy',  energy_needed:'low',   category:'Self-care'},
+    {emoji:'📵',text:'Screens off 30 min before bed',time_min:2, difficulty:'easy',  energy_needed:'low',   category:'Self-care'},
+    {emoji:'🚿',text:'Take a warm shower',            time_min:10,difficulty:'medium',energy_needed:'medium',category:'Self-care'},
+    {emoji:'🪥',text:'Brush and floss your teeth',    time_min:3, difficulty:'easy',  energy_needed:'low',   category:'Self-care'},
+    {emoji:'🧴',text:'Moisturize your skin',          time_min:2, difficulty:'easy',  energy_needed:'low',   category:'Self-care'},
+    {emoji:'🥑',text:'Prepare a healthy snack',       time_min:5, difficulty:'easy',  energy_needed:'low',   category:'Self-care'},
+  ],
+  'Calm':[
+    {emoji:'🌬️',text:'Get some fresh air',           time_min:5, difficulty:'easy',energy_needed:'low',category:'Calm'},
+    {emoji:'🎵',text:'Listen to calming music',       time_min:10,difficulty:'easy',energy_needed:'low',category:'Calm'},
+    {emoji:'💨',text:'Box breathing (4-4-4-4)',       time_min:5, difficulty:'easy',energy_needed:'low',category:'Calm'},
+    {emoji:'🍵',text:'Make a warm drink and savor it',time_min:10,difficulty:'easy',energy_needed:'low',category:'Calm'},
+    {emoji:'⏱️',text:'15-minute screen break',        time_min:15,difficulty:'easy',energy_needed:'low',category:'Calm'},
+  ],
+  'Mindfulness':[
+    {emoji:'🕯️',text:'Practice mindful breathing',        time_min:3,difficulty:'easy',energy_needed:'low',category:'Mindfulness'},
+    {emoji:'🌤️',text:'5-4-3-2-1 grounding exercise',      time_min:5,difficulty:'easy',energy_needed:'low',category:'Mindfulness'},
+    {emoji:'💗',text:'Write one thing that went well',     time_min:3,difficulty:'easy',energy_needed:'low',category:'Mindfulness'},
+    {emoji:'💝',text:"Name one thing you're grateful for", time_min:2,difficulty:'easy',energy_needed:'low',category:'Mindfulness'},
+    {emoji:'🪨',text:'5-minute body scan',                 time_min:5,difficulty:'easy',energy_needed:'low',category:'Mindfulness'},
+  ],
+  'Move':[
+    {emoji:'🏃',text:'Walk for 10 minutes',           time_min:10,difficulty:'medium',energy_needed:'medium',category:'Move'},
+    {emoji:'🧘',text:'5 minutes of gentle stretching',time_min:5, difficulty:'easy',  energy_needed:'low',   category:'Move'},
+    {emoji:'💪',text:'10 jumping jacks',              time_min:2, difficulty:'medium',energy_needed:'medium',category:'Move'},
+    {emoji:'🚶',text:'Stand up and walk around',      time_min:3, difficulty:'easy',  energy_needed:'low',   category:'Move'},
+  ],
+};
+const CAT={
+  'Productivity':{c:'text-amber-500',  bg:'bg-amber-50'  },
+  'Self-care':   {c:'text-rose-400',   bg:'bg-rose-50'   },
+  'Move':        {c:'text-emerald-500',bg:'bg-emerald-50'},
+  'Mindfulness': {c:'text-violet-500', bg:'bg-violet-50' },
+  'Calm':        {c:'text-sky-500',    bg:'bg-sky-50'    },
+  'Prayer':      {c:'text-teal-600',   bg:'bg-teal-50'   },
+};
+const DIFF={
+  easy:  {lbl:'Easy',  c:'text-emerald-600',bg:'bg-emerald-50'},
+  medium:{lbl:'Medium',c:'text-amber-600',  bg:'bg-amber-50'  },
+  hard:  {lbl:'Hard',  c:'text-rose-600',   bg:'bg-rose-50'   },
+};
+const ERANK={low:1,medium:2,high:3};
+const ECAP ={crisis:0,low:1,medium:2,high:3};
+const XPMAP={easy:10,medium:20,hard:35};
+const GRND=[
+  {emoji:'👁️',prompt:'Name 5 things you can SEE right now'},
+  {emoji:'✋',prompt:'Name 4 things you can TOUCH or feel'},
+  {emoji:'👂',prompt:'Name 3 sounds you can HEAR'},
+  {emoji:'👃',prompt:'Name 2 things you can SMELL'},
+  {emoji:'👅',prompt:'Name 1 thing you can TASTE'},
+];
+
+/* ═══════════════════════════════════════════════════════════════
+   STATE
+   ══════════════════════════════════════════════════════════════*/
+let S={
+  loading:true, user:null,
+  profile:{xp:0,current_streak:0,longest_streak:0},
+  tasks:[], dumps:[],
+  tab:'today', energy:'medium',
+  showAdd:false, addCat:'Self-care',
+  toast:null, _tt:null,
+  haltGone:false, haltTicked:{},
+  authMode:'signin', authEmail:'', authPassword:'',
+  authError:'', authNotice:'', authBusy:false,
+  showStuck:false, stuckIdx:0,
+  showBreath:false, showGround:false,
+  groundStep:0, groundInputs:['','','','',''],
+  focusIdx:0, dumpText:'', dumpMood:null,
+  prayerBonusPaid:false,
+};
+
+// Timer — survives renders
+const TMR={secs:25*60,running:false,phase:'work',tomatoes:0};
+let _tmrI=null;
+// Breathing — survives renders
+const BRE={phase:0,count:4,cycles:0,running:false};
+let _breI=null;
+const BRE_PH=['Inhale','Hold','Exhale','Hold'];
+const BRE_CL=['#60a5fa','#a78bfa','#34d399','#fbbf24'];
+
+/* ═══════════════════════════════════════════════════════════════
+   HELPERS
+   ══════════════════════════════════════════════════════════════*/
+const pad=n=>String(n).padStart(2,'0');
+const fmt=s=>`${pad(Math.floor(s/60))}:${pad(s%60)}`;
+const todayISO=()=>new Date().toISOString().slice(0,10);
+const todayStr=()=>new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+const dayI=()=>new Date().getDay();
+function esc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function pct(d,t){return t>0?Math.round(d/t*100):0;}
+function showToast(m){if(S._tt)clearTimeout(S._tt);S.toast=m;S._tt=setTimeout(()=>{S.toast=null;render();},2500);render();}
+function cloudMood(){const p=pct(S.tasks.filter(t=>t.done).length,S.tasks.length);return p===100?'🥳':p>=50?'😊':p>0?'🙂':'😴';}
+function cloudGlow(){const p=pct(S.tasks.filter(t=>t.done).length,S.tasks.length);return p===100?'from-violet-100 to-fuchsia-50':S.energy==='crisis'?'from-red-50 to-orange-50':p>=50?'from-cyan-100 to-sky-50':'from-blue-100 to-indigo-50';}
+
+/* ═══════════════════════════════════════════════════════════════
+   SUPABASE DATA
+   ══════════════════════════════════════════════════════════════*/
+async function loadProfile(){
+  const{data}=await sb.from('profiles').select('xp,current_streak,longest_streak,last_active_date').eq('id',S.user.id).single();
+  if(data)S.profile=data;
+}
+async function loadTasks(){
+  await sb.rpc('seed_default_tasks');
+  const today=todayISO();
+  const[{data:tpl},{data:done}]=await Promise.all([
+    sb.from('task_templates').select('*').eq('user_id',S.user.id).eq('active',true).order('sort_order'),
+    sb.from('task_completions').select('template_id').eq('user_id',S.user.id).eq('completed_date',today),
+  ]);
+  const ds=new Set((done||[]).map(d=>d.template_id));
+  S.tasks=(tpl||[]).map(t=>({...t,done:ds.has(t.id)}));
+}
+async function loadDumps(){
+  const{data}=await sb.from('brain_dumps').select('*').eq('user_id',S.user.id).order('created_at');
+  S.dumps=data||[];
+}
+async function dbToggle(id){
+  const task=S.tasks.find(t=>t.id===id);if(!task)return;
+  const completing=!task.done;
+  S.tasks=S.tasks.map(t=>t.id===id?{...t,done:!t.done}:t);render();
+  if(completing){
+    await sb.from('task_completions').insert({user_id:S.user.id,template_id:id,completed_date:todayISO()});
+    const earned=XPMAP[task.difficulty]||10;
+    const{data}=await sb.rpc('award_xp',{p_amount:earned});
+    if(data?.[0])S.profile={...S.profile,...data[0]};
+    showToast(`+${earned} XP! 🎉`);
+  }else{
+    await sb.from('task_completions').delete().eq('user_id',S.user.id).eq('template_id',id).eq('completed_date',todayISO());
+    render();
+  }
+}
+async function dbAdd(item){
+  if(S.tasks.some(t=>t.text===item.text)){S.showAdd=false;render();return;}
+  const{data,error}=await sb.from('task_templates').insert({
+    user_id:S.user.id,category:item.category,emoji:item.emoji,text:item.text,
+    time_min:item.time_min,difficulty:item.difficulty,energy_needed:item.energy_needed,
+    habit_stack:item.habit_stack||'',sort_order:S.tasks.length+1,
+  }).select().single();
+  if(!error&&data)S.tasks=[...S.tasks,{...data,done:false}];
+  S.showAdd=false;showToast('Task added ✓');
+}
+async function dbDump(content,mood){
+  const{data,error}=await sb.from('brain_dumps').insert({user_id:S.user.id,content,mood}).select().single();
+  if(!error&&data)S.dumps=[...S.dumps,data];
+}
+async function dbConvert(id){
+  const item=S.dumps.find(d=>d.id===id);if(!item)return;
+  S.dumps=S.dumps.map(d=>d.id===id?{...d,converted:true}:d);render();
+  await sb.from('brain_dumps').update({converted:true}).eq('id',id);
+  await dbAdd({emoji:'📝',text:item.content,category:'Productivity',time_min:5,difficulty:'medium',energy_needed:'medium',habit_stack:''});
+}
+async function bonusXp(amount,msg){
+  const{data}=await sb.rpc('award_xp',{p_amount:amount});
+  if(data?.[0])S.profile={...S.profile,...data[0]};
+  showToast(msg||`+${amount} XP Bonus!`);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TIMER
+   ══════════════════════════════════════════════════════════════*/
+function tmrStart(){
+  if(_tmrI)return;TMR.running=true;render();
+  _tmrI=setInterval(()=>{
+    TMR.secs--;
+    const d=document.getElementById('tmr-d');if(d)d.textContent=fmt(TMR.secs);
+    const c=document.getElementById('tmr-c');
+    if(c){const tot=TMR.phase==='work'?25*60:5*60,C=2*Math.PI*52;c.style.strokeDashoffset=C*(1-(tot-TMR.secs)/tot);}
+    if(TMR.secs<=0){
+      clearInterval(_tmrI);_tmrI=null;TMR.running=false;
+      if(TMR.phase==='work'){TMR.tomatoes++;TMR.phase='break';TMR.secs=5*60;}
+      else{TMR.phase='work';TMR.secs=25*60;}
+      render();
+    }
+  },1000);
+}
+function tmrPause(){clearInterval(_tmrI);_tmrI=null;TMR.running=false;render();}
+function tmrReset(){clearInterval(_tmrI);_tmrI=null;TMR.running=false;TMR.phase='work';TMR.secs=25*60;render();}
+
+/* ═══════════════════════════════════════════════════════════════
+   BOX BREATHING
+   ══════════════════════════════════════════════════════════════*/
+function breStart(){
+  if(_breI||BRE.cycles>=4)return;BRE.running=true;render();
+  _breI=setInterval(()=>{
+    BRE.count--;
+    if(BRE.count<=0){BRE.phase=(BRE.phase+1)%4;if(BRE.phase===0)BRE.cycles++;BRE.count=4;}
+    if(BRE.cycles>=4){clearInterval(_breI);_breI=null;BRE.running=false;render();return;}
+    const cE=document.getElementById('bre-c');if(cE)cE.textContent=BRE.count;
+    const lE=document.getElementById('bre-l');if(lE){lE.textContent=BRE_PH[BRE.phase];lE.style.color=BRE_CL[BRE.phase];}
+    const cy=document.getElementById('bre-cy');if(cy)cy.textContent=`${BRE.cycles}/4 cycles`;
+  },1000);
+}
+function breStop(){clearInterval(_breI);_breI=null;BRE.running=false;render();}
+function breReset(){clearInterval(_breI);_breI=null;BRE.running=false;BRE.phase=0;BRE.count=4;BRE.cycles=0;render();}
+
+/* ═══════════════════════════════════════════════════════════════
+   EVENT HANDLERS
+   ══════════════════════════════════════════════════════════════*/
+async function handleAuth(){
+  const em=document.getElementById('au-em')?.value||'';
+  const pw=document.getElementById('au-pw')?.value||'';
+  S.authEmail=em;S.authPassword=pw;S.authError='';S.authNotice='';S.authBusy=true;render();
+  const fn=S.authMode==='signin'
+    ?()=>sb.auth.signInWithPassword({email:em,password:pw})
+    :()=>sb.auth.signUp({email:em,password:pw});
+  const{error}=await fn();
+  S.authBusy=false;
+  if(error){S.authError=error.message;render();return;}
+  if(S.authMode==='signup'){S.authNotice='Account created! Check your email, then sign in.';S.authMode='signin';render();}
+}
+async function handleSignOut(){
+  await sb.auth.signOut();
+  S.user=null;S.tasks=[];S.dumps=[];S.profile={xp:0,current_streak:0,longest_streak:0};S.prayerBonusPaid=false;render();
+}
+async function handleToggle(id){
+  const prayersBefore=S.tasks.filter(t=>t.category==='Prayer');
+  const allBefore=prayersBefore.length>0&&prayersBefore.every(t=>t.done);
+  await dbToggle(id);
+  const prayersAfter=S.tasks.filter(t=>t.category==='Prayer');
+  const allAfter=prayersAfter.length>0&&prayersAfter.every(t=>t.done);
+  if(!allBefore&&allAfter&&!S.prayerBonusPaid){S.prayerBonusPaid=true;await bonusXp(50,'+50 XP Bonus! 🕌 All prayers done!');}
+}
+function handleHALT(id){
+  if(S.haltTicked[id])return;
+  const h=HALT.find(x=>x.id===id);S.haltTicked[id]=true;dbAdd(h.task);
+}
+function handleAddByIdx(cat,idx){const item=SUGG[cat]?.[idx];if(item)dbAdd(item);}
+async function handleDump(){
+  const el=document.getElementById('dp-txt');
+  const txt=el?.value||'';if(!txt.trim())return;
+  S.dumpText='';render();
+  for(const line of txt.split('\n').map(l=>l.trim()).filter(Boolean))await dbDump(line,S.dumpMood);
+  render();
+}
+function handleShuffle(){
+  const p=S.tasks.filter(t=>!t.done);
+  S.focusIdx=Math.floor(Math.random()*Math.max(p.length,1));S.showStuck=false;render();
+}
+async function handleFocusDone(id){
+  S.showStuck=false;await handleToggle(id);
+  const p=S.tasks.filter(t=>!t.done);S.focusIdx=Math.max(0,Math.min(S.focusIdx,p.length-1));render();
+}
+function handleSkip(len){S.focusIdx=(S.focusIdx+1)%Math.max(len,1);S.showStuck=false;render();}
+function saveGrnd(){const el=document.getElementById('gr-inp');if(el)S.groundInputs[S.groundStep]=el.value;}
+
+/* ═══════════════════════════════════════════════════════════════
+   RENDER FUNCTIONS
+   ══════════════════════════════════════════════════════════════*/
+function rLoad(){
+  return`<div class="min-h-screen bg-gradient-to-b from-blue-100 to-indigo-50 flex flex-col items-center justify-center gap-3">
+    <span class="text-6xl pulse">☁️</span>
+    <p class="text-gray-500 font-bold text-sm">Loading Breeze...</p>
+  </div>`;
+}
+
+function rAuth(){
+  return`<div class="min-h-screen bg-gradient-to-b from-blue-100 to-indigo-50 flex justify-center items-center px-4">
+    <div class="w-full max-w-sm">
+      <div class="flex flex-col items-center mb-6">
+        <span class="text-7xl mb-2 select-none" style="filter:drop-shadow(0 4px 12px rgba(147,197,253,.5))">☁️</span>
+        <h1 class="text-2xl font-black text-gray-800">Breeze</h1>
+        <p class="text-gray-500 font-semibold text-sm mt-1 text-center">A gentle daily companion for ADHD brains</p>
+      </div>
+      <div class="bg-white rounded-3xl shadow-md p-5">
+        <div class="flex bg-gray-50 rounded-xl p-1 mb-4">
+          <button onclick="S.authMode='signin';S.authError='';S.authNotice='';render()" class="flex-1 py-2 rounded-lg text-sm font-black transition-all ${S.authMode==='signin'?'bg-white text-blue-500 shadow-sm':'text-gray-400'}">Sign In</button>
+          <button onclick="S.authMode='signup';S.authError='';S.authNotice='';render()" class="flex-1 py-2 rounded-lg text-sm font-black transition-all ${S.authMode==='signup'?'bg-white text-blue-500 shadow-sm':'text-gray-400'}">Sign Up</button>
+        </div>
+        <div class="flex flex-col gap-3">
+          <div>
+            <label class="text-xs font-black text-gray-400 uppercase tracking-widest block mb-1">Email</label>
+            <input id="au-em" type="email" value="${esc(S.authEmail)}" placeholder="you@example.com"
+              oninput="S.authEmail=this.value" onkeydown="if(event.key==='Enter')handleAuth()"
+              class="w-full bg-gray-50 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-gray-800 outline-none border-2 border-transparent focus:border-blue-300 transition-colors"/>
+          </div>
+          <div>
+            <label class="text-xs font-black text-gray-400 uppercase tracking-widest block mb-1">Password</label>
+            <input id="au-pw" type="password" value="${esc(S.authPassword)}" placeholder="••••••••"
+              oninput="S.authPassword=this.value" onkeydown="if(event.key==='Enter')handleAuth()"
+              class="w-full bg-gray-50 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-gray-800 outline-none border-2 border-transparent focus:border-blue-300 transition-colors"/>
+          </div>
+          ${S.authError?`<p class="text-rose-600 bg-rose-50 rounded-xl px-3 py-2 text-xs font-bold">${esc(S.authError)}</p>`:''}
+          ${S.authNotice?`<p class="text-emerald-600 bg-emerald-50 rounded-xl px-3 py-2 text-xs font-bold">${esc(S.authNotice)}</p>`:''}
+          <button onclick="handleAuth()" ${S.authBusy?'disabled':''} class="w-full bg-blue-500 text-white font-black text-sm py-3 rounded-xl shadow-md shadow-blue-200 disabled:opacity-50 mt-1">
+            ${S.authBusy?'One moment...':(S.authMode==='signin'?'Sign In':'Create Account')}
+          </button>
+        </div>
+      </div>
+      <p class="text-center text-gray-400 text-xs font-semibold mt-4">Your data is private and only visible to you.</p>
+    </div>
+  </div>`;
+}
+
+function rCard(task,hl){
+  const cat=CAT[task.category]||CAT['Mindfulness'];
+  const df=DIFF[task.difficulty]||DIFF.easy;
+  return`<div class="bg-white rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3 ${task.done?'opacity-40':''}${hl?' border-l-4 border-emerald-300':''}">
+    <span class="text-2xl leading-none flex-shrink-0">${task.emoji}</span>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-1.5 mb-0.5 flex-wrap">
+        <span class="font-black uppercase tracking-wider ${cat.c}" style="font-size:10px">${esc(task.category)}</span>
+        <span class="font-bold px-1.5 py-0.5 rounded-full ${df.bg} ${df.c}" style="font-size:10px">${df.lbl}</span>
+        <span class="text-gray-400 font-bold" style="font-size:10px">~${task.time_min}m</span>
+      </div>
+      <p class="font-bold text-gray-800 text-sm leading-snug ${task.done?'line-through text-gray-400':''}">${esc(task.text)}</p>
+      ${task.habit_stack&&!task.done?`<p class="text-gray-400 mt-0.5 truncate" style="font-size:10px">📌 ${esc(task.habit_stack)}</p>`:''}
+    </div>
+    <button onclick="handleToggle('${task.id}')" class="w-7 h-7 rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${task.done?'bg-blue-400 border-blue-400':'border-gray-200'}">
+      ${task.done?'<span class="text-white font-black text-xs">✓</span>':''}
+    </button>
+  </div>`;
+}
+
+function rToday(){
+  const cap=ECAP[S.energy]??2;
+  const prayers=S.tasks.filter(t=>t.category==='Prayer');
+  const pDone=prayers.filter(t=>t.done).length;
+  const allP=prayers.length>0&&pDone===prayers.length;
+  const vis=S.tasks.filter(t=>t.category!=='Prayer'&&(ERANK[t.energy_needed]||2)<=cap+1);
+  const quick=vis.filter(t=>!t.done&&t.time_min<=3);
+  const done=S.tasks.filter(t=>t.done).length,total=S.tasks.length,p=pct(done,total);
+  return`<div class="flex flex-col gap-3 px-4 py-4">
+
+    <!-- Energy -->
+    <div class="bg-white rounded-2xl p-3.5 shadow-sm">
+      <p class="font-black text-gray-400 uppercase tracking-widest mb-2.5" style="font-size:11px">🧠 How's your brain right now?</p>
+      <div class="grid grid-cols-4 gap-1.5">
+        ${ENERGY_LEVELS.map(e=>`<button onclick="S.energy='${e.id}';render()"
+          class="flex flex-col items-center gap-1 rounded-xl py-2.5 border-2 ${S.energy===e.id?`${e.border} ${e.bg} ${e.text}`:'border-gray-100 text-gray-400'}">
+          <span class="text-xl">${e.emoji}</span><span class="font-black leading-tight" style="font-size:10px">${e.label}</span>
+        </button>`).join('')}
+      </div>
+      ${S.energy?`<p class="mt-2.5 text-xs text-gray-500 font-semibold text-center italic">"${ENERGY_LEVELS.find(e=>e.id===S.energy)?.desc}"</p>`:''}
+    </div>
+
+    <!-- Prayers -->
+    ${prayers.length>0?`<div class="rounded-2xl p-4 shadow-sm ${allP?'bg-gradient-to-br from-teal-50 to-emerald-50 border border-teal-100':'bg-white'}">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl">🕌</span>
+          <div><p class="font-black text-gray-800 text-sm">الصلوات الخمس</p><p class="text-gray-400 font-semibold" style="font-size:10px">Daily Prayers</p></div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-black ${allP?'text-teal-600':'text-gray-500'}">${pDone}/${prayers.length}</span>
+          ${allP?'<span class="font-black px-2 py-0.5 rounded-full bg-teal-100 text-teal-700" style="font-size:10px">+50 XP 🎉</span>':''}
+        </div>
+      </div>
+      <div class="w-full bg-gray-100 rounded-full mb-3 overflow-hidden" style="height:6px">
+        <div class="h-full rounded-full transition-all duration-700" style="width:${prayers.length>0?pDone/prayers.length*100:0}%;background:linear-gradient(90deg,#2dd4bf,#10b981)"></div>
+      </div>
+      <div class="space-y-1.5">
+        ${PRAYERS_META.map(pm=>{
+          const t=prayers.find(x=>x.text.includes(pm.en));if(!t)return'';
+          return`<button onclick="handleToggle('${t.id}')" class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left ${t.done?'bg-teal-50':'bg-gray-50 hover:bg-gray-100'}">
+            <span class="text-lg leading-none">${pm.emoji}</span>
+            <div class="flex-1 min-w-0">
+              <p class="font-black text-sm ${t.done?'text-teal-700':'text-gray-800'}">${pm.ar}</p>
+              <p class="text-gray-400 font-semibold" style="font-size:10px">${pm.en} · ${pm.time}</p>
+            </div>
+            <div class="rounded-lg border-2 flex items-center justify-center flex-shrink-0 ${t.done?'bg-teal-500 border-teal-500':'border-gray-200'}" style="width:24px;height:24px">
+              ${t.done?'<span class="text-white font-black text-xs">✓</span>':''}
+            </div>
+          </button>`;
+        }).join('')}
+      </div>
+      ${allP?'<p class="text-center text-teal-600 font-black text-xs mt-3">🌟 الحمد لله — All prayers complete today!</p>':''}
+    </div>`:''}
+
+    <!-- HALT -->
+    ${!S.haltGone?`<div class="bg-amber-50 border border-amber-100 rounded-2xl p-3.5">
+      <div class="flex items-center justify-between mb-1.5">
+        <p class="text-amber-700 font-black uppercase tracking-widest" style="font-size:11px">⚡ HALT Check-In</p>
+        <button onclick="S.haltGone=true;render()" class="text-amber-400 font-black text-xs">✕</button>
+      </div>
+      <p class="text-gray-500 font-semibold mb-2.5" style="font-size:11px">Before tasks — check your basic needs:</p>
+      <div class="grid grid-cols-2 gap-1.5">
+        ${HALT.map(h=>`<button onclick="handleHALT('${h.id}')" class="flex items-center gap-2 rounded-xl px-2.5 py-2 border text-left ${S.haltTicked[h.id]?'border-amber-300 bg-amber-100':'border-transparent bg-white'}">
+          <span class="text-base">${h.emoji}</span>
+          <div><p class="font-black text-gray-700" style="font-size:11px">${h.label}</p>${S.haltTicked[h.id]?`<p class="text-amber-600 font-semibold" style="font-size:10px">${h.fix}</p>`:''}</div>
+        </button>`).join('')}
+      </div>
+    </div>`:''}
+
+    <!-- Progress -->
+    <div class="bg-white rounded-2xl px-4 py-3 shadow-sm">
+      <div class="flex justify-between items-center mb-2">
+        <p class="font-black text-gray-800 text-sm">${vis.length} tasks for your energy</p>
+        <button onclick="S.tab='focus';render()" class="font-black text-blue-500 bg-blue-50 rounded-full px-2.5 py-1" style="font-size:11px">Focus Mode →</button>
+      </div>
+      <div class="w-full bg-gray-100 rounded-full overflow-hidden" style="height:10px">
+        <div class="h-full rounded-full transition-all duration-700" style="width:${p}%;background:${p===100?'linear-gradient(90deg,#a78bfa,#f472b6)':'linear-gradient(90deg,#60a5fa,#93c5fd)'}"></div>
+      </div>
+      <p class="text-right text-gray-400 font-semibold mt-1" style="font-size:10px">${done}/${total} complete · ${p}%</p>
+    </div>
+
+    <!-- Quick wins -->
+    ${quick.length>0?`<div><p class="font-black text-emerald-600 uppercase tracking-widest mb-2" style="font-size:11px">⚡ Quick Wins — Under 3 Min</p>
+      <div class="space-y-2">${quick.slice(0,3).map(t=>rCard(t,true)).join('')}</div></div>`:''}
+
+    <!-- All tasks -->
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <p class="font-black text-gray-400 uppercase tracking-widest" style="font-size:11px">All Tasks</p>
+        <button onclick="S.showAdd=true;render()" class="font-black text-blue-500" style="font-size:11px">+ Add task</button>
+      </div>
+      <div class="space-y-2">${vis.map(t=>rCard(t,false)).join('')}</div>
+      ${vis.length===0?`<div class="text-center py-8"><p class="text-sm font-bold text-gray-300">No tasks match your current energy.</p><p class="text-gray-300 mt-1" style="font-size:11px">Raise your energy level or add simple tasks.</p></div>`:''}
+    </div>
+    <button onclick="S.showAdd=true;render()" class="w-full flex items-center gap-2.5 bg-white rounded-2xl px-4 py-3 shadow-sm text-blue-500 font-black text-sm">
+      <div class="w-7 h-7 bg-blue-50 rounded-full flex items-center justify-center font-black text-lg">+</div>Add a task
+    </button>
+  </div>`;
+}
+
+function rFocus(){
+  const pend=S.tasks.filter(t=>!t.done);
+  if(!pend.length)return`<div class="flex flex-col items-center justify-center py-16 px-6 text-center gap-4">
+    <span class="text-7xl">🥳</span>
+    <h2 class="text-2xl font-black text-gray-800">Every task complete!</h2>
+    <p class="text-gray-500 font-semibold leading-relaxed">Your brain worked genuinely hard today. You've earned rest without guilt.</p>
+    <div class="bg-violet-50 rounded-2xl p-4 text-left w-full">
+      <p class="text-violet-600 font-black uppercase tracking-widest mb-2" style="font-size:11px">🧠 What just happened in your brain</p>
+      <p class="text-gray-700 font-semibold text-sm leading-relaxed">Completing tasks triggered real dopamine releases all day. Your prefrontal cortex literally strengthened with each win. Rest now — it consolidates everything.</p>
+    </div>
+  </div>`;
+  const idx=Math.min(S.focusIdx,pend.length-1),task=pend[idx];
+  const cat=CAT[task.category]||CAT['Mindfulness'],df=DIFF[task.difficulty]||DIFF.easy;
+  const C=2*Math.PI*52,tot=TMR.phase==='work'?25*60:5*60,col=TMR.phase==='work'?'#60a5fa':'#34d399';
+  return`<div class="flex flex-col gap-3 px-4 py-4">
+    <div class="flex items-center justify-between">
+      <p class="font-black text-gray-400 uppercase tracking-widest" style="font-size:11px">${pend.length} task${pend.length!==1?'s':''} remaining</p>
+      <button onclick="handleShuffle()" class="font-black text-blue-500 bg-blue-50 rounded-full px-3 py-1.5" style="font-size:11px">🔀 Pick for me</button>
+    </div>
+    <div class="bg-white rounded-3xl p-5 shadow-md text-center">
+      <span class="text-5xl block mb-3">${task.emoji}</span>
+      <div class="flex items-center justify-center gap-2 mb-2">
+        <span class="font-black uppercase tracking-wider ${cat.c}" style="font-size:10px">${task.category}</span>
+        <span class="font-bold px-2 py-0.5 rounded-full ${df.bg} ${df.c}" style="font-size:10px">${df.lbl}</span>
+      </div>
+      <h2 class="text-xl font-black text-gray-800 leading-tight mb-1">${esc(task.text)}</h2>
+      <p class="text-gray-400 font-semibold text-xs">~${task.time_min} min${task.time_min!==1?'s':''}</p>
+      ${task.habit_stack?`<span class="inline-block mt-2 bg-gray-50 text-gray-400 font-semibold rounded-xl px-3 py-1.5" style="font-size:11px">📌 Best: ${esc(task.habit_stack)}</span>`:''}
+    </div>
+    <!-- Pomodoro -->
+    <div class="bg-white rounded-2xl p-4 shadow-sm">
+      <div class="flex items-center justify-between mb-3">
+        <p class="font-black uppercase tracking-widest ${TMR.phase==='work'?'text-blue-500':'text-emerald-500'}" style="font-size:11px">${TMR.phase==='work'?'🎯 Focus Session':'☕ Rest Break'}</p>
+        ${TMR.tomatoes>0?`<span class="bg-red-50 text-red-500 font-black px-2.5 py-1 rounded-full" style="font-size:11px">🍅 ${TMR.tomatoes}</span>`:''}
+      </div>
+      <div class="relative mx-auto mb-4" style="width:128px;height:128px">
+        <svg class="w-full h-full" style="transform:rotate(-90deg)" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="52" fill="none" stroke="#f3f4f6" stroke-width="8"/>
+          <circle id="tmr-c" cx="60" cy="60" r="52" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round"
+            stroke-dasharray="${C}" style="stroke-dashoffset:${C*(1-(tot-TMR.secs)/tot)};transition:stroke-dashoffset 1s linear"/>
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span id="tmr-d" class="text-3xl font-black text-gray-800" style="font-variant-numeric:tabular-nums">${fmt(TMR.secs)}</span>
+          <span class="text-gray-400 font-bold" style="font-size:10px">${TMR.phase==='work'?'stay focused':'you earned it'}</span>
+        </div>
+      </div>
+      <div class="flex justify-center gap-2">
+        <button onclick="${TMR.running?'tmrPause()':'tmrStart()'}" class="flex items-center gap-2 px-6 py-2.5 rounded-xl font-black text-sm ${TMR.running?'bg-gray-100 text-gray-600':'bg-blue-500 text-white shadow-lg shadow-blue-200'}">
+          ${TMR.running?'⏸ Pause':'▶ Start Focus'}
+        </button>
+        <button onclick="tmrReset()" class="bg-gray-100 rounded-xl flex items-center justify-center text-gray-400 font-bold text-lg" style="width:40px;height:40px">↺</button>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <button onclick="S.showStuck=!S.showStuck;S.showBreath=false;S.showGround=false;render()" class="py-3 rounded-xl bg-amber-50 text-amber-600 font-black text-sm">😵‍💫 I'm Stuck</button>
+      <button onclick="handleFocusDone('${task.id}')" class="py-3 rounded-xl bg-blue-500 text-white font-black text-sm shadow-md shadow-blue-200">✓ Done!</button>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="S.showGround=!S.showGround;S.showBreath=false;S.showStuck=false;render()" class="flex-1 py-2 rounded-xl font-black ${S.showGround?'bg-violet-200 text-violet-700':'bg-violet-50 text-violet-600'}" style="font-size:11px">🌿 Ground Me</button>
+      <button onclick="S.showBreath=!S.showBreath;S.showGround=false;S.showStuck=false;render()" class="flex-1 py-2 rounded-xl font-black ${S.showBreath?'bg-blue-200 text-blue-700':'bg-blue-50 text-blue-500'}" style="font-size:11px">💨 Breathe</button>
+      ${pend.length>1?`<button onclick="handleSkip(${pend.length})" class="flex-1 py-2 rounded-xl text-gray-400 bg-gray-50 font-black" style="font-size:11px">Skip →</button>`:''}
+    </div>
+    ${S.showStuck?`<div class="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+      <p class="text-amber-700 font-black uppercase tracking-widest mb-2" style="font-size:11px">💡 ${esc(STUCK[S.stuckIdx].t)}</p>
+      <p class="text-gray-700 font-semibold text-sm leading-relaxed">${esc(STUCK[S.stuckIdx].b)}</p>
+      <button onclick="S.stuckIdx=(S.stuckIdx+1)%${STUCK.length};render()" class="mt-2.5 text-amber-600 font-black underline underline-offset-2" style="font-size:11px">Another strategy →</button>
+    </div>`:''}
+    ${S.showBreath?`<div class="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-blue-700 font-black uppercase tracking-widest" style="font-size:11px">📦 Box Breathing 4-4-4-4</p>
+        <button onclick="S.showBreath=false;breStop();render()" class="text-gray-400 font-black text-sm">✕</button>
+      </div>
+      <div class="text-center py-2">
+        <div class="w-20 h-20 mx-auto rounded-2xl bg-white border-4 border-blue-200 flex items-center justify-center mb-3">
+          <span id="bre-c" class="text-3xl font-black" style="color:${BRE_CL[BRE.phase]}">${BRE.count}</span>
+        </div>
+        <p id="bre-l" class="text-lg font-black mb-1" style="color:${BRE_CL[BRE.phase]}">${BRE_PH[BRE.phase]}</p>
+        <p id="bre-cy" class="text-xs text-gray-400 font-semibold">${BRE.cycles}/4 cycles${BRE.cycles>=4?' ✓ Complete':''}</p>
+      </div>
+      <button onclick="${BRE.running?'breStop()':BRE.cycles>=4?'breReset()':'breStart()'}"
+        class="w-full py-2.5 rounded-xl font-black text-sm mt-2 ${BRE.running?'bg-gray-100 text-gray-600':'bg-blue-500 text-white shadow-md shadow-blue-200'}">
+        ${BRE.running?'Pause':BRE.cycles>=4?'Restart':'Start'}
+      </button>
+    </div>`:''}
+    ${S.showGround?`<div class="bg-violet-50 border border-violet-100 rounded-2xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-violet-700 font-black uppercase tracking-widest" style="font-size:11px">🌿 5-4-3-2-1 Grounding</p>
+        <button onclick="S.showGround=false;S.groundStep=0;render()" class="text-violet-400 font-black text-sm">✕</button>
+      </div>
+      <div class="flex gap-1 mb-4">${GRND.map((_,i)=>`<div class="flex-1 rounded-full ${i<=S.groundStep?'bg-violet-400':'bg-violet-200'}" style="height:6px"></div>`).join('')}</div>
+      <div class="text-center mb-3">
+        <span class="text-4xl block mb-2">${GRND[S.groundStep].emoji}</span>
+        <p class="text-violet-700 font-black text-sm">${GRND[S.groundStep].prompt}</p>
+      </div>
+      <textarea id="gr-inp" rows="2" placeholder="Type here..."
+        class="w-full bg-white rounded-xl p-3 text-sm font-semibold text-gray-700 resize-none outline-none border border-violet-100">${esc(S.groundInputs[S.groundStep])}</textarea>
+      <div class="flex gap-2 mt-2">
+        ${S.groundStep>0?`<button onclick="saveGrnd();S.groundStep--;render()" class="flex-1 py-2 bg-violet-100 text-violet-600 font-black text-sm rounded-xl">← Back</button>`:''}
+        ${S.groundStep<4
+          ?`<button onclick="saveGrnd();S.groundStep++;render()" class="flex-1 py-2 bg-violet-500 text-white font-black text-sm rounded-xl">Next →</button>`
+          :`<button onclick="S.showGround=false;S.groundStep=0;S.groundInputs=['','','','',''];render()" class="flex-1 py-2 bg-emerald-500 text-white font-black text-sm rounded-xl">✓ I feel grounded</button>`}
+      </div>
+    </div>`:''}
+  </div>`;
+}
+
+function rDump(){
+  const MOODS=[{id:'great',e:'😄',l:'Great'},{id:'okay',e:'😐',l:'Okay'},{id:'anxious',e:'😰',l:'Anxious'},{id:'sad',e:'😔',l:'Sad'},{id:'angry',e:'😠',l:'Angry'},{id:'overwhelmed',e:'🤯',l:'Whelmed'}];
+  const pend=S.dumps.filter(d=>!d.converted);
+  return`<div class="flex flex-col gap-3 px-4 py-4">
+    <div class="bg-white rounded-2xl p-3.5 shadow-sm">
+      <p class="font-black text-gray-400 uppercase tracking-widest mb-2.5" style="font-size:11px">💭 How are you feeling?</p>
+      <div class="flex gap-1.5 flex-wrap">
+        ${MOODS.map(m=>`<button onclick="S.dumpMood='${m.id}';render()" class="flex items-center gap-1 rounded-full px-2.5 py-1.5 border font-black ${S.dumpMood===m.id?'border-blue-300 bg-blue-50 text-blue-600':'border-gray-100 text-gray-500'}" style="font-size:11px">${m.e} ${m.l}</button>`).join('')}
+      </div>
+      ${S.dumpMood==='overwhelmed'?`<div class="mt-2.5 bg-violet-50 rounded-xl p-2.5"><p class="text-violet-700 font-bold leading-relaxed" style="font-size:11px">🌿 That's okay. Overwhelm is your brain's signal it's carrying too much. Dump everything below — getting it out of your head is the first step.</p></div>`:''}
+      ${S.dumpMood==='anxious'?`<div class="mt-2.5 bg-blue-50 rounded-xl p-2.5"><p class="text-blue-700 font-bold leading-relaxed" style="font-size:11px">💨 Try 3 slow breaths first. Anxiety narrows focus — dumping your thoughts will help widen it again.</p></div>`:''}
+    </div>
+    <div class="bg-white rounded-2xl p-4 shadow-sm">
+      <p class="font-black text-gray-400 uppercase tracking-widest mb-1" style="font-size:11px">🧠 Brain Dump</p>
+      <p class="text-gray-400 font-semibold mb-3" style="font-size:11px">No filter. No judgment. One thought per line. Just get it out of your head.</p>
+      <textarea id="dp-txt" rows="5" placeholder="Anything on your mind...&#10;Worries, ideas, to-dos...&#10;One thought per line."
+        oninput="S.dumpText=this.value"
+        class="w-full text-sm text-gray-800 font-semibold resize-none outline-none leading-relaxed">${esc(S.dumpText)}</textarea>
+      <button onclick="handleDump()" class="mt-3 w-full bg-blue-500 text-white font-black text-sm py-2.5 rounded-xl shadow-md shadow-blue-100">Dump It 🧠</button>
+      <p class="text-center text-gray-300 mt-2 font-semibold" style="font-size:10px">Clearing working memory reduces cognitive load</p>
+    </div>
+    ${S.dumps.length>0?`<div class="space-y-2">
+      <p class="font-black text-gray-400 uppercase tracking-widest" style="font-size:11px">Captured (${pend.length} to process)</p>
+      ${S.dumps.map(d=>`<div class="bg-white rounded-xl px-4 py-3 shadow-sm flex items-start gap-3 ${d.converted?'opacity-30':''}">
+        <span class="text-gray-700 font-semibold text-sm flex-1 leading-snug">${esc(d.content)}</span>
+        ${d.converted?'<span class="text-emerald-400 flex-shrink-0 mt-0.5">✓</span>':`<button onclick="dbConvert('${d.id}')" class="font-black text-blue-500 bg-blue-50 px-2.5 py-1 rounded-full flex-shrink-0 mt-0.5" style="font-size:11px;white-space:nowrap">→ Task</button>`}
+      </div>`).join('')}
+      ${pend.length>0?`<p class="text-gray-400 text-center font-semibold" style="font-size:10px">Tap "→ Task" to add anything to your task list</p>`:''}
+    </div>`:`<div class="text-center py-8 text-gray-300"><span class="text-4xl block mb-2">🧠</span>
+      <p class="text-sm font-semibold">Your captured thoughts will appear here</p>
+      <p class="mt-1" style="font-size:11px">Externalizing thoughts frees up ADHD working memory</p>
+    </div>`}
+  </div>`;
+}
+
+function rWins(){
+  const done=S.tasks.filter(t=>t.done).length,total=S.tasks.length,p=pct(done,total);
+  const xp=S.profile.xp||0,streak=S.profile.current_streak||0;
+  const level=Math.floor(xp/100)+1,lvlXP=xp%100,hardDone=S.tasks.filter(t=>t.done&&t.difficulty==='hard').length;
+  const unlocked=ACHIEVEMENTS.filter(a=>a.check(S)),di=dayI();
+  return`<div class="flex flex-col gap-3 px-4 py-4">
+    <div class="bg-gradient-to-br from-violet-50 via-blue-50 to-fuchsia-50 rounded-2xl p-4 border border-violet-100">
+      <p class="text-violet-600 font-black uppercase tracking-widest mb-2" style="font-size:11px">✨ Today's Affirmation</p>
+      <p class="text-gray-800 font-black text-base leading-snug">"${AFFIRM[di%AFFIRM.length]}"</p>
+    </div>
+    <div class="bg-white rounded-2xl p-4 shadow-sm">
+      <div class="flex items-center justify-between mb-2">
+        <div><p class="font-black text-gray-800 text-base">Level ${level}</p><p class="text-gray-400 font-semibold" style="font-size:11px">${100-lvlXP} XP until next level</p></div>
+        <div class="flex items-center gap-1.5 bg-amber-50 rounded-full px-3 py-1.5"><span>⭐</span><span class="font-black text-amber-600 text-sm">${xp} XP</span></div>
+      </div>
+      <div class="w-full bg-gray-100 rounded-full overflow-hidden" style="height:12px">
+        <div class="h-full rounded-full transition-all duration-700" style="width:${lvlXP}%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      ${[{i:'🔥',v:streak,l:'Day Streak'},{i:'🏆',v:`${done}/${total}`,l:'Done Today'},{i:'⚡',v:`${p}%`,l:'Completed'},{i:'💪',v:hardDone,l:'Hard Wins'}].map(s=>`
+        <div class="bg-white rounded-2xl p-4 shadow-sm text-center">
+          <span class="text-2xl block mb-1">${s.i}</span>
+          <p class="text-2xl font-black text-gray-800">${s.v}</p>
+          <p class="text-gray-400 font-bold" style="font-size:11px">${s.l}</p>
+        </div>`).join('')}
+    </div>
+    <div class="bg-white rounded-2xl p-4 shadow-sm">
+      <p class="font-black text-gray-400 uppercase tracking-widest mb-3" style="font-size:11px">🏆 Achievements — ${unlocked.length}/${ACHIEVEMENTS.length} unlocked</p>
+      <div class="grid grid-cols-4 gap-2">
+        ${ACHIEVEMENTS.map(a=>{const got=unlocked.some(u=>u.id===a.id);return`<div title="${esc(a.label)}" class="rounded-xl p-2 text-center border ${got?'bg-amber-50 border-amber-100':'bg-gray-50 border-gray-100 opacity-35'}">
+          <span class="text-2xl block">${a.emoji}</span>
+          <p class="font-black text-gray-700 mt-1 leading-tight" style="font-size:9px">${a.label}</p>
+        </div>`;}).join('')}
+      </div>
+    </div>
+    <div class="bg-blue-50 rounded-2xl p-4 border border-blue-100">
+      <p class="text-blue-600 font-black uppercase tracking-widest mb-2" style="font-size:11px">🔬 ADHD Science</p>
+      <p class="text-gray-700 font-semibold text-sm leading-relaxed">${SCIENCE[di%SCIENCE.length]}</p>
+    </div>
+  </div>`;
+}
+
+function rAddSheet(){
+  const added=new Set(S.tasks.map(t=>t.text));
+  const cats=Object.keys(SUGG),items=SUGG[S.addCat]||[];
+  return`<div class="fixed inset-0 z-50 flex flex-col justify-end" style="max-width:384px;left:50%;transform:translateX(-50%)">
+    <div class="absolute inset-0 bg-black/25 backdrop-blur-sm" onclick="S.showAdd=false;render()"></div>
+    <div class="relative bg-gray-50 rounded-t-3xl shadow-2xl flex flex-col z-10 slide-up" style="max-height:78vh">
+      <div class="flex justify-center pt-3 pb-1"><div class="w-10 bg-gray-200 rounded-full" style="height:6px"></div></div>
+      <div class="bg-white mx-3 rounded-2xl shadow-sm p-4 mb-2">
+        <div class="flex items-center justify-between">
+          <p class="font-black text-gray-800">Add a task</p>
+          <button onclick="S.showAdd=false;render()" class="bg-gray-100 text-gray-500 font-black rounded-full px-3 py-1.5" style="font-size:11px">Close</button>
+        </div>
+        <p class="text-gray-400 font-semibold mt-1" style="font-size:11px">Tasks with time estimates help with ADHD time blindness.</p>
+      </div>
+      <div class="flex border-b border-gray-100 bg-white px-3">
+        ${cats.map(c=>`<button onclick="S.addCat='${c}';render()" class="flex-1 font-black py-2.5 border-b-2 ${S.addCat===c?'border-blue-400 text-blue-500':'border-transparent text-gray-400'}" style="font-size:10px">${c}</button>`).join('')}
+      </div>
+      <div class="overflow-y-auto flex-1 p-3 space-y-2">
+        ${items.map((item,idx)=>{const a=added.has(item.text),d=DIFF[item.difficulty]||DIFF.easy;return`<button onclick="${a?'':(`handleAddByIdx('${S.addCat}',${idx})`)}" ${a?'disabled':''} class="w-full bg-white rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm text-left ${a?'opacity-40 cursor-default':'hover:shadow-md'}">
+          <span class="text-xl flex-shrink-0">${item.emoji}</span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5 mb-0.5">
+              <span class="font-bold px-1.5 py-0.5 rounded-full ${d.bg} ${d.c}" style="font-size:10px">${d.lbl}</span>
+              <span class="text-gray-400 font-bold" style="font-size:10px">~${item.time_min}m</span>
+            </div>
+            <span class="font-bold text-gray-800 text-sm">${esc(item.text)}</span>
+          </div>
+          ${a?'<span class="text-emerald-400">✓</span>':'<span class="text-gray-300">+</span>'}
+        </button>`;}).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+function rApp(){
+  const done=S.tasks.filter(t=>t.done).length,total=S.tasks.length,p=pct(done,total);
+  const TABS=[{id:'today',icon:'🏠',lbl:'Today'},{id:'focus',icon:'🎯',lbl:'Focus'},{id:'dump',icon:'🧠',lbl:'Dump'},{id:'wins',icon:'⭐',lbl:'Wins'}];
+  return`
+  ${S.toast?`<div class="fixed top-4 z-50 bg-blue-500 text-white text-sm font-black px-4 py-2.5 rounded-full shadow-xl" style="left:50%;transform:translateX(-50%);white-space:nowrap">✨ ${esc(S.toast)}</div>`:''}
+  <div class="bg-gradient-to-b ${cloudGlow()} pt-10 pb-4 px-4 transition-all duration-700">
+    <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-1.5 bg-white/70 rounded-full px-2.5 py-1 shadow-sm">
+        <span>🔥</span><span class="text-sm font-black text-gray-700">${S.profile.current_streak||0} day streak</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5 bg-white/70 rounded-full px-2.5 py-1 shadow-sm">
+          <span>⭐</span><span class="text-sm font-black text-amber-600">${S.profile.xp||0} XP</span>
+        </div>
+        <button onclick="handleSignOut()" title="Sign out" class="w-7 h-7 bg-white/70 rounded-full flex items-center justify-center shadow-sm text-gray-500 font-black" style="font-size:13px">↩</button>
+      </div>
+    </div>
+    <div class="flex items-center gap-3.5">
+      <div class="relative flex-shrink-0">
+        <span class="text-6xl select-none" style="filter:drop-shadow(0 4px 12px rgba(147,197,253,.5))">☁️</span>
+        <span class="absolute inset-0 flex items-center justify-center text-2xl pb-1.5 pointer-events-none">${cloudMood()}</span>
+      </div>
+      <div>
+        <p class="font-black text-gray-800 text-sm">${todayStr()}</p>
+        <p class="text-xs text-gray-500 font-semibold">${done}/${total} done · ${p}% complete</p>
+        ${p===100&&total>0?'<p class="text-xs text-violet-600 font-black mt-0.5">✨ All done — incredible!</p>':''}
+      </div>
+    </div>
+  </div>
+  <div class="flex-1 overflow-y-auto pb-20">
+    ${S.tab==='today'?rToday():S.tab==='focus'?rFocus():S.tab==='dump'?rDump():rWins()}
+  </div>
+  <div class="fixed bottom-0 bg-white border-t border-gray-100 flex px-2 py-2 z-40 shadow-xl" style="width:100%;max-width:384px;left:50%;transform:translateX(-50%)">
+    ${TABS.map(t=>`<button onclick="S.tab='${t.id}';render()" class="flex-1 flex flex-col items-center gap-0.5 py-1 rounded-xl ${S.tab===t.id?'text-blue-500 bg-blue-50':'text-gray-400'}">
+      <span style="font-size:18px">${t.icon}</span><span class="font-black" style="font-size:10px">${t.lbl}</span>
+    </button>`).join('')}
+  </div>
+  ${S.showAdd?rAddSheet():''}`;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RENDER
+   ══════════════════════════════════════════════════════════════*/
+function render(){
+  const root=document.getElementById('root');if(!root)return;
+  if(S.loading){root.innerHTML=rLoad();return;}
+  if(!S.user){root.innerHTML=rAuth();return;}
+  root.innerHTML=rApp();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   INIT
+   ══════════════════════════════════════════════════════════════*/
+async function init(){
+  const{data:{session}}=await sb.auth.getSession();
+  if(session){
+    S.user=session.user;
+    await Promise.all([loadProfile(),loadTasks(),loadDumps()]);
+  }
+  S.loading=false;render();
+  sb.auth.onAuthStateChange(async(_ev,session)=>{
+    if(session){
+      S.user=session.user;S.loading=true;render();
+      await Promise.all([loadProfile(),loadTasks(),loadDumps()]);
+      S.loading=false;
+    }else{
+      S.user=null;S.tasks=[];S.dumps=[];S.profile={xp:0,current_streak:0,longest_streak:0};S.prayerBonusPaid=false;
+    }
+    render();
+  });
+}
+init();
+</script>
+</body>
+</html>
